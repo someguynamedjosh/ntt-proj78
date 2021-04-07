@@ -1,65 +1,54 @@
 use std::error::Error;
 
-/// Creates an enum with a public function `from_name` that returns the corresponding enum variant
-/// given a matching string.
-macro_rules! keyword_enum {
-    ($EnumName:ident {
-        $($EnumVariantName:ident $name_in_source:ident),*$(,)?
-    }) => {
-        #[derive(Clone, Copy)]
-        enum $EnumName {
-            $($EnumVariantName),*
-        }
-        impl $EnumName {
-            pub fn from_name(name: &str) -> Option<Self> {
-                match name {
-                    $(stringify!($name_in_source) => Some(Self::$EnumVariantName)),*,
-                    _ => None,
-                }
-            }
-        }
+mod vm_program;
+
+const VIRTUAL_REGISTER_START: usize = 0;
+const STATIC_MEMORY_START: usize = 16;
+const STACK_MEMORY_START: usize = 256;
+const HEAP_MEMORY_START: usize = 2048;
+const MEMORY_MAPPED_IO_START: usize = 16384;
+
+const STACK_POINTER_ADDR: &str = "SP";
+const LOCAL_POINTER_ADDR: &str = "LCL";
+const ARGUMENT_POINTER_ADDR: &str = "ARG";
+const THIS_POINTER_ADDR: &str = "THIS";
+const THAT_POINTER_ADDR: &str = "THAT";
+const TEMP_SEGMENT_START: usize = VIRTUAL_REGISTER_START + 5;
+const TEMP_SEGMENT_LENGTH: usize = 4;
+const GENERAL_PURPOSE_ADDRS: [&str; 3] = ["R13", "R14", "R15"];
+
+#[derive(Clone, Copy)]
+enum ParserState {
+    Command,
+    Argument {
+        /// Indicates which argument the next symbol will provide.
+        current_index: usize,
+        /// Indicates how many more arguments need to be specified for this 
+        remaining: usize,
     }
 }
 
-// Everything on the left is the Rust identifier of an enum variant and the things on the right
-// are the corresponding text of that keyword in the source file.
-keyword_enum!(ArithmeticOpcode {
-    Add add,
-    Sub sub,
-    Neg neg,
-    Eq eq,
-    Gt gt,
-    Lt lt,
-    And and,
-    Or or,
-    Not not,
-});
-
-keyword_enum!(MemorySegment {
-    Argument argument,
-    Local local,
-    Static static,
-    Constant constant,
-    This this,
-    That that,
-    Pointer pointer,
-    Temp temp,
-});
-
-#[derive(Clone, Copy, Debug)]
-struct SymbolId(usize);
-
-#[derive(Clone, Copy)]
-enum VmCommand {
-    Arithmetic(ArithmeticOpcode),
-    Push(MemorySegment, usize),
-    Pop(MemorySegment, usize),
-    // Goto(SymbolId),
-    // IfGoto(SymbolId),
-    // Return,
+struct Parser<'a> {
+    source: &'a str,
+    current_line: usize,
+    current_col: usize,
+    current_state: ParserState,
 }
 
-struct VmProgram;
+impl<'a> Parser<'a> {
+    pub fn new(source: &'a str) -> Self {
+        Self {
+            source,
+            current_line: 1,
+            current_col: 1,
+            current_state: ParserState::Command,
+        }
+    }
+
+    pub fn parse(mut self) -> VmProgram {
+        VmProgram
+    }
+}
 
 impl VmProgram {
     pub fn parse_from(src: &str) -> Result<Self, Box<dyn Error>> {
@@ -72,9 +61,10 @@ impl VmProgram {
 }
 
 fn entry() -> Result<(), Box<dyn Error>> {
+    // TODO: Accept directories.
     let mut source = String::new();
-    let first_filename = std::env::args().skip(1).next();
-    let first_filename = first_filename.ok_or(format!("Must specify at least one .vm file."))?;
+    let base_name = std::env::args().skip(1).next();
+    let base_name = base_name.ok_or(format!("Must specify at least one file or folder."))?;
     for filename in std::env::args().skip(1) {
         if !filename.contains(".vm") {
             Err(format!(
@@ -90,7 +80,11 @@ fn entry() -> Result<(), Box<dyn Error>> {
     let program = VmProgram::parse_from(&source[..])?;
     let result = program.translated()?;
     println!("{}", result);
-    let output_name = first_filename.replace(".vm", ".asm");
+    let output_name = if base_name.contains("vm") {
+        base_name.replace(".vm", ".asm")
+    } else {
+        format!("{}.asm", base_name)
+    };
     let result = std::fs::write(&output_name, result);
     result.map_err(|err| {
         format!(
