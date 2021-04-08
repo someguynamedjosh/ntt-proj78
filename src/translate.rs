@@ -266,8 +266,16 @@ M=D
         self.result.push_str("// end command: return\n\n");
     }
 
+    fn load_d_from_offset(offset: usize) -> String {
+        format!("@{}\nD=M\n", offset)
+    }
+
     fn load_d_from_ptr_offset(ptr_name: &str, offset: usize) -> String {
         format!("@{}\nD=M\n@{}\nA=D+A\nD=M\n", ptr_name, offset)
+    }
+
+    fn store_d_into_offset(offset: usize) -> String {
+        format!("@{}\nM=D\n", offset)
     }
 
     fn store_d_into_ptr_offset(ptr_name: &str, offset: usize) -> String {
@@ -282,10 +290,12 @@ M=D
         use MemorySegment::*;
         let code = match segment {
             Constant => format!("@{}\nD=A", index),
-            Argument => Self::load_d_from_ptr_offset("ARG", index),
             Local => Self::load_d_from_ptr_offset("LCL", index),
-            Pointer => Self::load_d_from_ptr_offset("3", index),
-            Temp => Self::load_d_from_ptr_offset("5", index),
+            Argument => Self::load_d_from_ptr_offset("ARG", index),
+            This => Self::load_d_from_ptr_offset("THIS", index),
+            That => Self::load_d_from_ptr_offset("THAT", index),
+            Pointer => Self::load_d_from_offset(3 + index),
+            Temp => Self::load_d_from_offset(5 + index),
             _ => unimplemented!("{:?}", segment),
         };
         self.result
@@ -301,8 +311,10 @@ M=D
             Constant => unreachable!(),
             Local => Self::store_d_into_ptr_offset("LCL", index),
             Argument => Self::store_d_into_ptr_offset("ARG", index),
-            Pointer => Self::store_d_into_ptr_offset("3", index),
-            Temp => Self::store_d_into_ptr_offset("5", index),
+            This => Self::store_d_into_ptr_offset("THIS", index),
+            That => Self::store_d_into_ptr_offset("THAT", index),
+            Pointer => Self::store_d_into_offset(3 + index),
+            Temp => Self::store_d_into_offset(5 + index),
             _ => unimplemented!("{:?}", segment),
         };
         self.result
