@@ -1,3 +1,4 @@
+use crate::vm_program::VmProgram;
 use std::error::Error;
 
 mod parse;
@@ -6,9 +7,9 @@ mod vm_program;
 
 fn entry() -> Result<(), Box<dyn Error>> {
     // TODO: Accept directories.
-    let mut source = String::new();
     let base_name = std::env::args().skip(1).next();
     let base_name = base_name.ok_or(format!("Must specify at least one file or folder."))?;
+    let mut program = VmProgram::new();
     for filename in std::env::args().skip(1) {
         if !filename.contains(".vm") {
             Err(format!(
@@ -18,12 +19,19 @@ fn entry() -> Result<(), Box<dyn Error>> {
         }
         let contents = std::fs::read_to_string(&filename);
         let contents = contents
-            .map_err(|err| format!("Failed to open \"{}\", caused by:\n{:?}", filename, err))?;
-        source.push_str(&contents.to_lowercase());
+            .map_err(|err| format!("Failed to open \"{}\", caused by:\n{}", filename, err))?;
+        parse::parse(&mut program, &contents[..], &filename[..])?;
     }
-    let program = parse::parse(&source[..])?;
+
+    // Optional printing of intermediate representation.
+    if cfg!(feature = "dump") {
+        println!("Internal Representation:\n{:#?}\n", program);
+    }
     let result = translate::translate(program)?;
-    println!("{}", result);
+    if cfg!(feature = "dump") {
+        println!("Translated Program:\n{}\n", result);
+    }
+
     let output_name = if base_name.contains("vm") {
         base_name.replace(".vm", ".asm")
     } else {
@@ -47,7 +55,7 @@ fn main() {
             std::process::exit(0);
         }
         Err(err) => {
-            eprintln!("Encountered error: {:?}", err);
+            eprintln!("Encountered an error:\n{}", err);
             drop(err);
             std::process::exit(1);
         }
