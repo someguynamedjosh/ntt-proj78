@@ -5,7 +5,7 @@ macro_rules! keyword_enum {
         $($EnumVariantName:ident $name_in_source:ident),*$(,)?
     }) => {
         #[derive(Clone, Copy)]
-        enum $EnumName {
+        pub enum $EnumName {
             $($EnumVariantName),*
         }
         impl $EnumName {
@@ -45,10 +45,10 @@ keyword_enum!(MemorySegment {
 });
 
 #[derive(Clone, Copy, Debug)]
-struct SymbolId(usize);
+pub struct SymbolId(usize);
 
 #[derive(Clone, Copy)]
-enum VmCommand {
+pub enum VmCommand {
     Arithmetic(ArithmeticOpcode),
     Push(MemorySegment, usize),
     Pop(MemorySegment, usize),
@@ -57,4 +57,4 @@ enum VmCommand {
     // Return,
 }
 
-struct VmProgram;
+pub struct VmProgram;
