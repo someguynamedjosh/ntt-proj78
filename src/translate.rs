@@ -59,12 +59,12 @@ impl Translator {
             self.result.push_str(&format!("D={}\n", from));
         }
         self.result.push_str(
-            r"@SP // Copy stack pointer address into A
-A=M+1 // Copy *spa + 1 into A.
-M=D // Copy D into *(*spa + 1)
-D=A // Copy *(*spa + 1) into D
-@SP // Copy spa into A
-M=D // Copy D (==*(*spa + 1)) into *spa
+            r"@SP      // Copy stack pointer address into A
+A=M      // Copy *spa into A.
+M=D      // Copy D into **spa
+D=A+1    // Copy *(*spa + 1) into D
+@SP      // Copy spa into A
+M=D      // Copy D (==*(*spa + 1)) into *spa
 
 ",
         );
@@ -74,14 +74,12 @@ M=D // Copy D (==*(*spa + 1)) into *spa
         self.result.push_str("// action: pop\n");
         self.result.push_str(
             r"@SP      // Copy stack pointer address into A
-A=M      // Copy *spa into A
-D=M      // Copy **spa into D
+A=M-1    // Copy *spa-1 into A
+D=M      // Copy *(*spa-1) into D
 @R13     // Copy r13addr into A
-M=D      // Copy **spa into *r13addr
+M=D      // Copy *(*spa-1) into *r13addr
 @SP      // Copy spa into A
-D=M-1    // Copy *spa - 1 into D
-@SP      // Copy spa into A
-M=D      // Copy *spa - 1 into *spa
+M=M-1    // Copy *spa-1 into *spa
 @R13     // Copy r13addr into A
 ",
         );
@@ -107,18 +105,18 @@ M=D      // Copy *spa - 1 into *spa
                 let skip_set_false = self.make_label();
                 self.result.push_str(&format!(
                     r"@SP      // Load spa into A
-A=M      // Load *spa into A
-D=D-M    // Perform comparison between D and **spa
-M=1      // Load true into **spa
+A=M-1    // Load *spa-1 into A
+D=M-D    // Perform comparison between D and *(*spa-1)
+M=-1     // Load true into *(*spa-1)
 @{0}
 D;{1}    // Skip setting value to false if condition is true
 @SP      // Load spa into A
-A=M      // Load *spa into A
-M=0      // Load false into **spa
+A=M-1    // Load *spa-1 into A
+M=0      // Load false into *(*spa-1)
 ({0})
 // end command: arithmetic
 
-                    ",
+",
                     skip_set_false,
                     match opcode {
                         Eq => "JEQ",
@@ -141,11 +139,11 @@ M=0      // Load false into **spa
         }
         self.result.push_str(&format!(
             r"@SP      // Load spa into A
-A=M      // Load *spa into A
+A=M-1    // Load *spa-1 into A
 {}
 // end command: arithmetic
 
-            ",
+",
             op
         ))
     }
@@ -162,9 +160,10 @@ A=M      // Load *spa into A
         use MemorySegment::*;
         let code = match segment {
             Constant => format!("@{}\nD=A", index),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         };
-        self.result.push_str(&format!("// command: push {:?} {}\n", segment, index));
+        self.result
+            .push_str(&format!("// command: push {:?} {}\n", segment, index));
         self.result.push_str(&code);
         self.push(D);
     }
@@ -185,10 +184,13 @@ A=M      // Load *spa into A
     fn translate(mut self, commands: Vec<VmCommand>) -> String {
         self.result.push_str(
             r"
+// Set up stack pointer
+@256
+D=A
 @SP
-M=0
+M=D
 
-            ",
+",
         );
         for command in commands {
             match command {
