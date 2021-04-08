@@ -6,6 +6,8 @@ struct Parser<'a> {
     file_path: &'a str,
     current_line: usize,
     current_col: usize,
+    /// Where (push static 0) and (pop static 0) should go.
+    static_base: usize,
     output: &'a mut VmProgram,
 }
 
@@ -18,6 +20,8 @@ impl<'a> Parser<'a> {
             file_path,
             current_line: 1,
             current_col: 1,
+            // Our static variables should go after any other static variables in the program.
+            static_base: output.static_size,
             output,
         }
     }
@@ -249,7 +253,13 @@ impl<'a> Parser<'a> {
 
     fn parse_push_pop_args(&mut self, is_push: bool) -> ParseResult {
         let (msp, memory_segment) = self.advance_mem_segment()?;
-        let index = self.advance_constant()?;
+        let mut index = self.advance_constant()?;
+        if let MemorySegment::Static = memory_segment {
+            index += self.static_base;
+            // Ensures that any files parsed later will not use this same spot to store a static
+            // variable.
+            self.output.increase_static_size(index + 1);
+        }
         self.output.push_command(if is_push {
             VmCommand::Push(memory_segment, index)
         } else {

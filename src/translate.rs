@@ -1,23 +1,8 @@
-use crate::vm_program::{ArithmeticOpcode, CommandName, MemorySegment, VmCommand, VmProgram};
+use crate::vm_program::{ArithmeticOpcode, MemorySegment, VmCommand, VmProgram};
 use std::{
     error::Error,
     fmt::{Display, Formatter},
 };
-
-const VIRTUAL_REGISTER_START: usize = 0;
-const STATIC_MEMORY_START: usize = 16;
-const STACK_MEMORY_START: usize = 256;
-const HEAP_MEMORY_START: usize = 2048;
-const MEMORY_MAPPED_IO_START: usize = 16384;
-
-const STACK_POINTER_ADDR: &str = "SP";
-const LOCAL_POINTER_ADDR: &str = "LCL";
-const ARGUMENT_POINTER_ADDR: &str = "ARG";
-const THIS_POINTER_ADDR: &str = "THIS";
-const THAT_POINTER_ADDR: &str = "THAT";
-const TEMP_SEGMENT_START: usize = VIRTUAL_REGISTER_START + 5;
-const TEMP_SEGMENT_LENGTH: usize = 4;
-const GENERAL_PURPOSE_ADDRS: [&str; 3] = ["R13", "R14", "R15"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Register {
@@ -281,7 +266,7 @@ M=D
     fn store_d_into_ptr_offset(ptr_name: &str, offset: usize) -> String {
         // ew...
         format!(
-            "@R13\nM=D\n@{0}\nD=A\n@{1}\nD=D+A\n@R14\nM=D\n@R13\nD=M\n@R14\nA=M\nM=D\n",
+            "@R13\nM=D\n@{0}\nD=M\n@{1}\nD=D+A\n@R14\nM=D\n@R13\nD=M\n@R14\nA=M\nM=D\n",
             ptr_name, offset
         )
     }
@@ -296,7 +281,9 @@ M=D
             That => Self::load_d_from_ptr_offset("THAT", index),
             Pointer => Self::load_d_from_offset(3 + index),
             Temp => Self::load_d_from_offset(5 + index),
-            _ => unimplemented!("{:?}", segment),
+            // The index of static push/pops is modified by the parser so that they are
+            // globally unique. We do not have to worry about what file the command came from.
+            Static => Self::load_d_from_offset(16 + index),
         };
         self.result
             .push_str(&format!("// command: push {:?} {}\n", segment, index));
@@ -315,7 +302,9 @@ M=D
             That => Self::store_d_into_ptr_offset("THAT", index),
             Pointer => Self::store_d_into_offset(3 + index),
             Temp => Self::store_d_into_offset(5 + index),
-            _ => unimplemented!("{:?}", segment),
+            // The index of static push/pops is modified by the parser so that they are
+            // globally unique. We do not have to worry about what file the command came from.
+            Static => Self::store_d_into_offset(16 + index),
         };
         self.result
             .push_str(&format!("// command: pop {:?} {}\n", segment, index));
@@ -324,13 +313,22 @@ M=D
     }
 
     fn translate(mut self, commands: Vec<VmCommand>) -> String {
+        if commands.contains(&VmCommand::Label(format!("Sys.init"))) {
+            // Bootstrap
+            self.result.push_str("// Bootstrap\n@256\nD=A\n@SP\nM=D\n");
+            self.translate_call(format!("Sys.init"), 0);
+        }
+        // Real code
         for command in commands {
             match command {
                 VmCommand::Arithmetic(opcode) => self.translate_arithmetic_opcode(opcode),
                 VmCommand::Call { fn_name, num_args } => self.translate_call(fn_name, num_args),
                 VmCommand::FnSetup { num_locals } => self.translate_fn_setup(num_locals),
                 VmCommand::Goto(label) => self.result.push_str(&format!("@{}\n0;JEQ\n", label)),
-                VmCommand::IfGoto(label) => unimplemented!(),
+                VmCommand::IfGoto(label) => {
+                    self.pop(D);
+                    self.result.push_str(&format!("@{}\nD;JNE\n", label));
+                }
                 VmCommand::Label(label) => self.result.push_str(&format!("({})\n", label)),
                 VmCommand::Push(segment, index) => self.translate_push(segment, index),
                 VmCommand::Pop(segment, index) => self.translate_pop(segment, index),
@@ -347,5 +345,5 @@ pub fn translate(program: VmProgram) -> Result<String, Box<dyn Error>> {
         result: String::new(),
         current_num_locals: 0,
     };
-    Ok(translator.translate(program.into_commands()))
+    Ok(translator.translate(program.commands))
 }

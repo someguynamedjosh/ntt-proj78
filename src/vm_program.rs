@@ -65,9 +65,10 @@ keyword_enum!(CommandName {
         name => ArithmeticOpcode::from_name(name).map(|o| Self::Arithmetic(o))
 });
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VmCommand {
     Arithmetic(ArithmeticOpcode),
+    // The index of static push/pops is modified by the parser so that they are globally unique.
     Push(MemorySegment, usize),
     Pop(MemorySegment, usize),
     Label(String),
@@ -80,13 +81,15 @@ pub enum VmCommand {
 
 #[derive(Debug)]
 pub struct VmProgram {
-    commands: Vec<VmCommand>,
+    pub commands: Vec<VmCommand>,
+    pub static_size: usize,
 }
 
 impl VmProgram {
     pub fn new() -> Self {
         Self {
             commands: Vec::new(),
+            static_size: 0,
         }
     }
 
@@ -94,7 +97,7 @@ impl VmProgram {
         self.commands.push(command);
     }
 
-    pub fn into_commands(self) -> Vec<VmCommand> {
-        self.commands
+    pub fn increase_static_size(&mut self, required_capacity: usize) {
+        self.static_size = self.static_size.max(required_capacity);
     }
 }
