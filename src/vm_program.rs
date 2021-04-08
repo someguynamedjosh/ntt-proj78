@@ -93,4 +93,8 @@ impl VmProgram {
     pub fn push_command(&mut self, command: VmCommand) {
         self.commands.push(command);
     }
+
+    pub fn into_commands(self) -> Vec<VmCommand> {
+        self.commands
+    }
 }

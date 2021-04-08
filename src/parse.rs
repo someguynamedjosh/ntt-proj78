@@ -178,17 +178,18 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn advance_mem_segment(&mut self) -> ParseResult<MemorySegment> {
+    fn advance_mem_segment(&mut self) -> ParseResult<(SavedPosition, MemorySegment)> {
         if let Some((pos, symbol)) = self.advance_symbol() {
             let segment = MemorySegment::from_name(symbol);
             let symbol = symbol.to_owned();
-            segment.ok_or_else(|| {
+            let segment = segment.ok_or_else(|| {
                 self.expected_one_of_found_error_message(
                     pos,
                     MemorySegment::all_names().iter(),
                     &symbol[..],
                 )
-            })
+            })?;
+            Ok((pos, segment))
         } else {
             Err(self.expected_one_of_eof_error_message(MemorySegment::all_names().iter()))
         }
@@ -247,11 +248,18 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_push_pop_args(&mut self, is_push: bool) -> ParseResult {
-        let memory_segment = self.advance_mem_segment()?;
+        let (msp, memory_segment) = self.advance_mem_segment()?;
         let index = self.advance_constant()?;
         self.output.push_command(if is_push {
             VmCommand::Push(memory_segment, index)
         } else {
+            if memory_segment == MemorySegment::Constant {
+                let footer = self.error_footer(msp);
+                Err(format!(
+                    "It is illegal to pop data into the `const` segment.{}",
+                    footer
+                ))?;
+            }
             VmCommand::Pop(memory_segment, index)
         });
         Ok(())
