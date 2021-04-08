@@ -65,17 +65,17 @@ keyword_enum!(CommandName {
         name => ArithmeticOpcode::from_name(name).map(|o| Self::Arithmetic(o))
 });
 
-#[derive(Clone, Copy, Debug)]
-pub struct SymbolId(usize);
-
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum VmCommand {
     Arithmetic(ArithmeticOpcode),
     Push(MemorySegment, usize),
     Pop(MemorySegment, usize),
-    // Goto(SymbolId),
-    // IfGoto(SymbolId),
-    // Return,
+    Label(String),
+    FnSetup { num_locals: usize },
+    Call { fn_name: String, num_args: usize },
+    Goto(String),
+    IfGoto(String),
+    Return,
 }
 
 #[derive(Debug)]

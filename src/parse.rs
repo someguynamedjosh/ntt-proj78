@@ -223,6 +223,29 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn advance_identifier(&mut self) -> ParseResult<String> {
+        if let Some((pos, symbol)) = self.advance_symbol() {
+            let symbol = symbol.to_owned();
+            for (idx, ch) in symbol.chars().enumerate() {
+                // If it is an illegal character or it is the first character and is a number...
+                if !(ch.is_ascii_alphanumeric() || ch == '_' || ch == '.' || ch == ':')
+                    || (ch.is_ascii_digit() && idx == 0)
+                {
+                    let footer = self.error_footer(pos);
+                    return Err(format!(
+                        "Encountered illegal character \'{}\' in identifier \"{}\".{}",
+                        ch, symbol, footer
+                    )
+                    .into());
+                }
+            }
+            Ok(symbol)
+        } else {
+            let footer = self.error_footer(self.save_pos());
+            Err(format!("Unexpected end of file, expected an identifier.{}", footer).into())
+        }
+    }
+
     fn parse_push_pop_args(&mut self, is_push: bool) -> ParseResult {
         let memory_segment = self.advance_mem_segment()?;
         let index = self.advance_constant()?;
@@ -238,14 +261,33 @@ impl<'a> Parser<'a> {
     fn advance_command_arguments(&mut self, command: CommandName) -> ParseResult {
         match command {
             CommandName::Arithmetic(op) => self.output.push_command(VmCommand::Arithmetic(op)),
-            CommandName::Call => unimplemented!(),
-            CommandName::Function => unimplemented!(),
-            CommandName::Goto => unimplemented!(),
-            CommandName::IfGoto => unimplemented!(),
-            CommandName::Label => unimplemented!(),
+            CommandName::Call => {
+                let fn_name = self.advance_identifier()?;
+                let num_args = self.advance_constant()?;
+                let command = VmCommand::Call { fn_name, num_args };
+                self.output.push_command(command);
+            }
+            CommandName::Function => {
+                let ident = self.advance_identifier()?;
+                let num_locals = self.advance_constant()?;
+                self.output.push_command(VmCommand::Label(ident));
+                self.output.push_command(VmCommand::FnSetup { num_locals });
+            }
+            CommandName::Goto => {
+                let ident = self.advance_identifier()?;
+                self.output.push_command(VmCommand::Goto(ident))
+            }
+            CommandName::IfGoto => {
+                let ident = self.advance_identifier()?;
+                self.output.push_command(VmCommand::IfGoto(ident))
+            }
+            CommandName::Label => {
+                let ident = self.advance_identifier()?;
+                self.output.push_command(VmCommand::Label(ident))
+            }
             CommandName::Push => self.parse_push_pop_args(true)?,
             CommandName::Pop => self.parse_push_pop_args(false)?,
-            CommandName::Return => unimplemented!(),
+            CommandName::Return => self.output.push_command(VmCommand::Return),
         }
         Ok(())
     }
