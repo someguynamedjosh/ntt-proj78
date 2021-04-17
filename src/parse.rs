@@ -54,7 +54,10 @@ impl<'a> Parser<'a> {
             .collect::<Vec<_>>()
             .join(", ");
         let footer = self.error_footer(pos);
-        let msg = format!("{}, expected one of:\n{}.{}", problem, expected_desc, footer);
+        let msg = format!(
+            "{}, expected one of:\n{}.{}",
+            problem, expected_desc, footer
+        );
         msg.into()
     }
 
